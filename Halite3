@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+# Python 3.6
+
+
+import hlt
+from hlt import constants
+from hlt.positionals import Direction
+
+# This library allows you to generate random numbers.
+import random
+
+
+import logging
+
+""" <<<Game Begin>>> """
+
+# This game object contains the initial game state.
+game = hlt.Game()
+game.ready("MyPythonBot")
+
+ship_status = {}
+
+logging.info("Successfully created bot! My Player ID is {}.".format(game.my_id))
+
+""" <<<Game Loop>>> """
+
+
+ship_state = {}
+
+while True:
+    game.update_frame()
+    me = game.me
+    game_map = game.game_map
+    
+    command_queue = []
+  
+
+  
+
+    dir_order = [Direction.North, Direction.West, Direction.East, Direction.South, Direction.Still]
+    
+    pos_choices = []
+    for ship in me.get_ships():
+        if ship.id not in ship_state:
+            ship_state[ship.id] = "collecting"
+    
+        p_options = ship.position.get_surrounding_cardinals() + [ship.position]
+        
+        #This would mean like {(0,1): (17,22)}
+        location_dict = {}
+        
+        #This would mean {(0,1): 450}
+        hal_dict = {}
+        
+        for x, direction in enumerate(dir_order):
+            location_dict[direction] = p_options[x]
+            
+        for direction in location_dict:
+            position = location_dict[direction]
+            halite_amount = game_map[position].halite_amount
+            if location_dict[direction] not in pos_choices:             
+                hal_dict[direction] = halite_amount
+
+            
+        if ship_state[ship.id] == "dumping":
+            move = game_map.naive_navigate(ship, me.shipyard.position)
+            pos_choices.append(location_dict[move])
+            command_queue.append(ship.move(move))
+            if move == Direction.Still:
+                ship_state[ship.id] = "collecting"
+            
+        
+        elif ship_state[ship.id] == "collecting":
+            choice_ship_goes = max(hal_dict, key=hal_dict.get)
+            pos_choices.append(location_dict[choice_ship_goes])
+            command_queue.append(ship.move(game_map.naive_navigate(ship, location_dict[choice_ship_goes])))
+            
+            if game.turn_number <= 30 and ship.halite_amount > constants.MAX_HALITE / 2:
+                ship_state[ship.id] = "dumping"
+                
+            elif ship.halite_amount > constants.MAX_HALITE / 5:
+                ship_state[ship.id] = "dumping"
+
+
+
+    # If the game is in the first 200 turns and you have enough halite, spawn a ship.
+    # Don't spawn a ship if you currently have a ship at port, though - the ships will collide.
+    if game.turn_number <= 198 and me.halite_amount >= constants.SHIP_COST and not game_map[me.shipyard].is_occupied:
+        command_queue.append(me.shipyard.spawn())
+
+    # Send your moves back to the game environment, ending this turn.
+    game.end_turn(command_queue)
+
